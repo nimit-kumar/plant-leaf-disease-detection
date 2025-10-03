@@ -1,1 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🌱 Plant Leaf Disease Classifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            background: url('https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1500&q=80') no-repeat center center fixed;
+            background-size: cover;
+        }
+        .overlay {
+            min-height: 100vh;
+            width: 100vw;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: rgba(70,170,80,.38);
+            z-index: 1;
+        }
+        .container {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: rgba(255,255,255,0.94);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,50,0,0.13);
+            padding: 32px 32px 28px 32px;
+            max-width: 380px;
+            width: 100%;
+            text-align: center;
+            margin: 50px 0;
+            backdrop-filter: blur(3px);
+        }
+        h1 {
+            color: #267a3e;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+        }
+        #preview {
+            max-width: 220px;
+            max-height: 220px;
+            margin-top: 17px;
+            display: none;
+            border: 2px solid #45a049;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,80,20,0.12);
+            background-color: #e8f5e9;
+        }
+        #result {
+            margin-top: 19px;
+            font-weight: bold;
+            font-size: 1.13em;
+            color: #111;
+        }
+        .top3 {
+            margin-top: 14px;
+            text-align: left;
+            display: inline-block;
+            width: 100%;
+            max-width: 310px;
+        }
+        /* Fixed, readable probability bars: */
+        .bar {
+            position: relative;
+            background: #e0ffe0;
+            border-radius: 5px;
+            margin-bottom: 9px;
+            height: 28px;
+            width: 100%;
+            overflow: hidden;
+            box-shadow: 0 1px 7px rgba(50,150,70,0.09);
+            display: flex;
+            align-items: center;
+        }
+        .bar-fill {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            background: linear-gradient(90deg, #69e069, #36b436);
+            border-radius: 5px;
+            z-index: 1;
+        }
+        .bar-label {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            color: #111;
+            padding: 0 14px;
+            font-size: 1em;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        button {
+            padding: 11px 28px;
+            font-size: 17px;
+            margin-top: 13px;
+            cursor: pointer;
+            border: none;
+            background: linear-gradient(90deg, #5fa65c, #259852);
+            color: white;
+            border-radius: 6px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background: linear-gradient(90deg, #3dac52, #04743b);
+            transform: translateY(-1px) scale(1.03);
+        }
+        input[type=file] {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: 1px solid #a5d6a7;
+            background: #f1f8e9;
+        }
+        @media (max-width: 600px) {
+            .container, .overlay { min-height: unset;}
+            .card { box-shadow: none; border-radius: 0; max-width: 98vw; padding: 14px;}
+            .top3 { width: 96vw; max-width: 98vw; }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay"></div>
+    <div class="container">
+        <div class="card">
+            <h1>🌱 Plant Leaf Disease Classifier</h1>
+            <form id="upload-form">
+                <input type="file" id="file-input" name="file" accept="image/*">
+                <br>
+                <button type="submit">Predict</button>
+            </form>
+            <img id="preview">
+            <div id="result"></div>
+            <div class="top3" id="top3"></div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select an image first!");
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            const preview = document.getElementById('preview');
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                const resultDiv = document.getElementById('result');
+                const top3Div = document.getElementById('top3');
+                top3Div.innerHTML = '';
+                if (data.error) {
+                    resultDiv.innerHTML = `<p style="color:red;">❌ ${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `🌱 Predicted: <b>${data.predicted_class}</b><br>Confidence: <b>${data.confidence}%</b>`;
+                    data.top3.forEach(item => {
+                        const bar = document.createElement('div');
+                        bar.className = 'bar';
+                        // Confidence bar fill
+                        const fill = document.createElement('div');
+                        fill.className = 'bar-fill';
+                        fill.style.width = `${item.confidence}%`;
+                        bar.appendChild(fill);
+                        // Class & confidence label over bar
+                        const label = document.createElement('div');
+                        label.className = 'bar-label';
+                        label.innerHTML = `<span>${item.class}</span><span>${item.confidence.toFixed(2)}%</span>`;
+                        bar.appendChild(label);
+                        top3Div.appendChild(bar);
+                    });
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('result').innerHTML = `<p style="color:red;">⚠️ Error during prediction!</p>`;
+            });
+        });
+    </script>
+</body>
+</html>
 

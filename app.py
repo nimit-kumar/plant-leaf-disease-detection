@@ -5,53 +5,55 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from werkzeug.utils import secure_filename
 
-# Flask app
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = 'uploads/'
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 
-# Model load karo
-MODEL_PATH = r"C:\Users\nimit\Music\.vscode\plant_leaf_disease_cnn_model.h5"
-model = load_model(MODEL_PATH)
+# Load model and class names
+model = load_model('plant_leaf_disease_cnn_model.h5')
+class_names = np.load('class_names.npy', allow_pickle=True).tolist()
 
-# Apne class labels (aap training ke time ki classes likho)
-class_names = ["Healthy", "Powdery", "Rust"]  # <-- apni classes dalna
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# Home route
 @app.route('/')
-def home():
+def index():
     return render_template('index.html')
 
-# Prediction route
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"})
-    
+        return jsonify({'error': 'No file uploaded'})
     file = request.files['file']
     if file.filename == '':
-        return jsonify({"error": "No file selected"})
-
-    if file:
-        # Save uploaded file
+        return jsonify({'error': 'No file selected'})
+    if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-
         # Preprocess image
-        img = image.load_img(filepath, target_size=(128, 128))  # apne training ke size pe dhyan do
+        img = image.load_img(filepath, target_size=(64, 64))
         img_array = image.img_to_array(img) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
-
         # Prediction
         predictions = model.predict(img_array)
-        predicted_class = class_names[np.argmax(predictions)]
-        confidence = float(np.max(predictions))
-
-        return jsonify({
-            "class": predicted_class,
-            "confidence": round(confidence * 100, 2)
-        })
+        predicted_class_idx = np.argmax(predictions[0])
+        confidence = float(np.max(predictions[0])) * 100  # percent
+        # Top-3 predictions
+        top3_indices = np.argsort(predictions[0])[-3:][::-1]
+        top3_predictions = [
+            {"class": class_names[i], "confidence": round(float(predictions[0][i]) * 100, 2)}
+            for i in top3_indices
+        ]
+        result = {
+            "predicted_class": class_names[predicted_class_idx],
+            "confidence": round(confidence, 2),
+            "top3": top3_predictions
+        }
+        return jsonify(result)
+    return jsonify({'error': 'Invalid file type'})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=7860, debug=True)
